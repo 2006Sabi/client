@@ -1,12 +1,8 @@
 // Environment configuration
 export const config = {
-  // Use proxy URLs in development to avoid CORS issues
-  apiUrl: import.meta.env.DEV
-    ? "http://localhost:8080/api"
-    : "https://iverto.onrender.com/api",
-  socketUrl: import.meta.env.DEV
-    ? "http://localhost:8080"
-    : "https://iverto.onrender.com",
+  // Use proxy URLs to avoid CORS issues - all requests go through /api path
+  apiUrl: "/api",
+  socketUrl: import.meta.env.DEV ? "http://localhost:8080" : "/",
 
   // App Configuration
   appName: import.meta.env.VITE_APP_NAME || "Iverto Security System",

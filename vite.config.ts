@@ -11,14 +11,14 @@ export default defineConfig(({ mode }) => ({
     proxy: {
       // Proxy API requests to bypass CORS in development
       "/api": {
-        target: "https://iverto.onrender.com",
+        target: "https://my-backend.vercel.app",
         changeOrigin: true,
         secure: true,
         rewrite: (path) => path.replace(/^\/api/, "/api"),
       },
       // Proxy WebSocket connections
       "/socket.io": {
-        target: "https://iverto.onrender.com",
+        target: "https://my-backend.vercel.app",
         changeOrigin: true,
         secure: true,
         ws: true,
