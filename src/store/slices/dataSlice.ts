@@ -1,18 +1,19 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import type { Camera, Anomaly } from "@/types/api";
+import type { DashboardStats, SystemHealth, CameraStats, AnomalyStats } from "@/types/dataTypes";
 
 interface DataState {
   // Dashboard data
-  dashboardStats: any | null;
-  systemHealth: any | null;
+  dashboardStats: DashboardStats | null;
+  systemHealth: SystemHealth | null;
 
   // Camera data
   cameras: Camera[];
-  cameraStats: any | null;
+  cameraStats: CameraStats | null;
 
   // Anomaly data
   anomalies: Anomaly[];
-  anomalyStats: any | null;
+  anomalyStats: AnomalyStats | null;
   recentAnomalies: Anomaly[];
 
   // Loading states

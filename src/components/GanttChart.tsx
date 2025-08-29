@@ -15,6 +15,8 @@ interface CameraTask {
   end: string;
   type?: string;
   status?: string;
+  anomalyId?: string;
+  anomalyData?: any;
 }
 
 interface CameraTasks {
@@ -25,12 +27,14 @@ interface GanttChartProps {
   selectedDate: string | null;
   cameraTasks: CameraTasks;
   onDateSelect?: (date: string) => void;
+  onAnomalyClick?: (anomalyData: any) => void;
 }
 
 const GanttChart: React.FC<GanttChartProps> = ({
   selectedDate,
   cameraTasks,
   onDateSelect,
+  onAnomalyClick,
 }) => {
   const isMobile = useIsMobile();
   const chartRef = useRef<HTMLDivElement>(null);
@@ -240,8 +244,8 @@ const GanttChart: React.FC<GanttChartProps> = ({
               No camera activity on {formatDate(selectedDate)}
             </div>
           ) : (
-            <div className="overflow-x-auto relative" ref={chartRef}>
-              <div className="min-w-[600px] sm:min-w-[800px] lg:min-w-[1000px] relative overflow-visible">
+            <div className="w-full overflow-hidden relative" ref={chartRef}>
+              <div className="w-full relative overflow-visible">
                 {/* Camera rows */}
                 {allCameras.map((camera) => {
                   const cameraTasks = tasksForDate.filter(
@@ -306,7 +310,7 @@ const GanttChart: React.FC<GanttChartProps> = ({
                                 <div
                                   className={`absolute rounded-sm ${getTaskColor(
                                     task.type
-                                  )} text-white flex items-center justify-center px-1 cursor-pointer hover:opacity-80 transition-opacity shadow-sm`}
+                                  )} text-white flex items-center justify-center px-1 cursor-pointer hover:opacity-80 transition-opacity shadow-sm hover:scale-105 hover:shadow-md`}
                                   style={{
                                     left: position.left,
                                     width: position.width,
@@ -315,6 +319,12 @@ const GanttChart: React.FC<GanttChartProps> = ({
                                     height: isMobile ? "12px" : "18px",
                                     top: isMobile ? "4px" : "3px",
                                     fontSize: isMobile ? "8px" : "10px",
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (onAnomalyClick && task.anomalyData) {
+                                      onAnomalyClick(task.anomalyData);
+                                    }
                                   }}
                                 >
                                   {!isMobile && (task.type || "Activity")}

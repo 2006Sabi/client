@@ -149,7 +149,7 @@ export const LiveCameraGrid = () => {
                     localIp ? (
                       <img
                         className="w-full h-full object-cover"
-                        src={`http://${localIp}:5000/stream/${camera._id}`}
+                        src={`http://${localIp}:8080/stream/${camera._id}`}
                         alt="Live Camera Stream"
                         onError={(e) => {
                           e.currentTarget.src = '/public/placeholder.svg';

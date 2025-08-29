@@ -14,7 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Camera, AlertTriangle, Wifi, WifiOff } from "lucide-react";
+import { Camera, AlertTriangle, Wifi, WifiOff, Eye } from "lucide-react";
 import { ListItemSkeleton } from "@/components/ui/loading";
 import { useWebSocket } from "@/contexts/WebSocketContext";
 import { useNavigate } from "react-router-dom";
@@ -32,6 +32,7 @@ import {
   Customized,
 } from "recharts";
 import { useGetAnomalyGraphDataQuery } from "@/store/api/anomalyApi";
+import { useLocalIp } from "@/contexts/LocalIpContext";
 
 import RecentAnomaliesList from "@/components/RecentAnomaliesList";
 import PieChartInlineLabel from "@/components/PieChartInlineLabel";
@@ -108,6 +109,7 @@ const Dashboard = () => {
   const { data: cameras, loading: camerasLoading } = useCameras();
   const { data: recentAnomalies, loading: anomaliesLoading } =
     useRecentAnomalies();
+  const localIp = useLocalIp();
 
   const navigate = useNavigate();
   const [selectedPieSlice, setSelectedPieSlice] = useState<string | null>(null);
@@ -127,6 +129,11 @@ const Dashboard = () => {
       ? realtimeAnomalies
       : recentAnomalies || [];
   }, [latestAnomalies, recentAnomalies]);
+
+  // Get the first camera for live streaming
+  const firstCamera = useMemo(() => {
+    return mergedCameras.length > 0 ? mergedCameras[0] : null;
+  }, [mergedCameras]);
 
   // Transform comprehensive API data for chart
   const chartData = useMemo(() => {
@@ -175,8 +182,6 @@ const Dashboard = () => {
       color: colors[index % colors.length],
     }));
   }, [recentAnomalies]);
-
-
 
   // Generate recent anomalies data from comprehensive data
   const recentAnomaliesData = useMemo(() => {
@@ -260,7 +265,7 @@ const Dashboard = () => {
     if (data && data.activePayload && data.activePayload[0]) {
       const selectedDate = data.activePayload[0].payload.date;
       // Navigate to Alerts page with the selected date
-      navigate('/alerts', { state: { selectedDate } });
+      navigate("/alerts", { state: { selectedDate } });
     }
   };
 
@@ -311,9 +316,91 @@ const Dashboard = () => {
           <main className="flex-1 overflow-auto p-2 sm:p-3 md:p-4 lg:p-6">
             {/* Mobile: Stack layout, Desktop: Grid layout */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 md:gap-6 h-full">
-              {/* Left Column - Charts (Mobile: Full width, Desktop: 8 columns) */}
+              {/* Left Column - Live Camera and Charts (Mobile: Full width, Desktop: 8 columns) */}
               <div className="lg:col-span-8 flex flex-col gap-3 sm:gap-4 md:gap-6">
-                {/* Anomaly Chart - Responsive with horizontal scroll on mobile */}
+                {/* Live Camera Stream - First Row */}
+                <Card className="modern-card bg-white border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
+                  <CardHeader className="px-3 sm:px-4 md:px-6 pt-3 sm:pt-4 md:pt-6 pb-2 sm:pb-3 md:pb-4">
+                    <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-sm sm:text-base md:text-lg font-semibold">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1.5 sm:p-2 rounded-xl bg-blue-100">
+                          <Eye className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-blue-700" />
+                        </div>
+                        <span className="text-xs sm:text-sm md:text-base">
+                          Live Camera Stream
+                        </span>
+                      </div>
+                      {firstCamera && (
+                        <Badge
+                          variant={
+                            firstCamera.status === "Online"
+                              ? "default"
+                              : "destructive"
+                          }
+                          className={`ml-auto ${
+                            firstCamera.status === "Online"
+                              ? "bg-green-500/10 text-green-600"
+                              : "bg-red-500/10 text-red-600"
+                          }`}
+                        >
+                          {firstCamera.status === "Online" ? (
+                            <>
+                              <Wifi className="h-3 w-3 mr-1" />{" "}
+                              {firstCamera.name}
+                            </>
+                          ) : (
+                            <>
+                              <WifiOff className="h-3 w-3 mr-1" />{" "}
+                              {firstCamera.name} - Offline
+                            </>
+                          )}
+                        </Badge>
+                      )}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-2 sm:px-3 md:px-4 pb-2 sm:pb-3 md:pb-4">
+                    <div className="aspect-video bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center relative overflow-hidden rounded-lg">
+                      {camerasLoading ? (
+                        <div className="flex items-center justify-center h-full">
+                          <div className="animate-spin rounded-full h-8 w-8 sm:h-10 sm:w-10 border-b-3 border-blue-600"></div>
+                        </div>
+                      ) : firstCamera &&
+                        firstCamera.status === "Online" &&
+                        localIp ? (
+                        <img
+                          className="w-full h-full object-cover"
+                          src={`http://${localIp}:5000/stream/${firstCamera._id}`}
+                          alt={`Live Stream - ${firstCamera.name}`}
+                          onError={(e) => {
+                            e.currentTarget.src = "/placeholder.svg";
+                          }}
+                          style={{ width: "100%", height: "100%" }}
+                        />
+                      ) : firstCamera ? (
+                        <div className="flex flex-col items-center justify-center w-full h-full text-gray-400">
+                          <WifiOff className="h-8 w-8 mb-2" />
+                          <span>{firstCamera.name} - Camera Offline</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center w-full h-full text-gray-400">
+                          <Camera className="h-8 w-8 mb-2" />
+                          <span>No cameras available</span>
+                        </div>
+                      )}
+                      {firstCamera && (
+                        <div
+                          className={`absolute top-4 left-4 w-3 h-3 rounded-full ${
+                            firstCamera.status === "Online"
+                              ? "bg-green-500 status-indicator status-online"
+                              : "bg-red-500 status-indicator status-offline"
+                          }`}
+                        />
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Anomaly Chart - Second Row */}
                 <Card className="modern-card bg-white border border-gray-200 shadow-md hover:shadow-lg transition-shadow">
                   <CardHeader className="px-3 sm:px-4 md:px-6 pt-3 sm:pt-4 md:pt-6 pb-2 sm:pb-3 md:pb-4">
                     <CardTitle className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-sm sm:text-base md:text-lg font-semibold">
@@ -322,10 +409,10 @@ const Dashboard = () => {
                           <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 text-red-700" />
                         </div>
                         <span className="text-xs sm:text-sm md:text-base">
-                          Anomalies by Date (Last 30 Days) - Click to view details
+                          Anomalies by Date (Last 30 Days) - Click to view
+                          details
                         </span>
                       </div>
-
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-2 sm:px-3 md:px-4 pb-2 sm:pb-3 md:pb-4">
@@ -417,8 +504,6 @@ const Dashboard = () => {
                     </div>
                   </CardContent>
                 </Card>
-
-
               </div>
 
               {/* Right Column - Pie Chart and Recent Anomalies (Mobile: Full width, Desktop: 4 columns) */}

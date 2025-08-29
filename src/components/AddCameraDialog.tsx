@@ -66,12 +66,11 @@ export const AddCameraDialog = ({ onAddCamera }: AddCameraDialogProps) => {
     e.preventDefault();
     setError("");
 
-    // Basic validation
+    // Basic validation - httpUrl is now optional
     if (
       !formData.name ||
       !formData.location ||
-      !formData.url ||
-      !formData.httpUrl
+      !formData.url
     ) {
       setError("Please fill in all required fields");
       return;
@@ -217,18 +216,17 @@ export const AddCameraDialog = ({ onAddCamera }: AddCameraDialogProps) => {
 
           {/* New field for HTTP stream URL */}
           <div className="space-y-2">
-            <Label htmlFor="httpUrl">HTTP Stream URL *</Label>
+            <Label htmlFor="httpUrl">HTTP Stream URL (Optional)</Label>
             <Input
               id="httpUrl"
               placeholder="e.g., http://192.168.1.100:8080/stream"
               value={formData.httpUrl}
               onChange={(e) => handleChange("httpUrl", e.target.value)}
               disabled={isLoading}
-              required
               className="rounded-none shadow-sm focus:shadow-md transition-shadow"
             />
             <p className="text-xs text-muted-foreground">
-              Enter the HTTP/HTTPS stream URL (optional for some cameras)
+              Enter the HTTP/HTTPS stream URL for web viewing (optional)
             </p>
           </div>
 

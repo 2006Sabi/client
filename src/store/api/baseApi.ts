@@ -17,7 +17,7 @@ const baseQuery = fetchBaseQuery({
   },
 });
 
-const baseQueryWithReauth = async (args: any, api: any, extraOptions: any) => {
+const baseQueryWithReauth = async (args: string | { url: string; method?: string; body?: any; params?: any }, api: any, extraOptions: any) => {
   let result = await baseQuery(args, api, extraOptions);
 
   // Handle 401 Unauthorized
@@ -32,11 +32,11 @@ const baseQueryWithReauth = async (args: any, api: any, extraOptions: any) => {
       extraOptions
     );
 
-    if (refreshResult?.data && (refreshResult.data as any).success) {
+    if (refreshResult?.data && (refreshResult.data as { success: boolean }).success) {
       // Store the new token
       api.dispatch({
         type: "auth/setCredentials",
-        payload: (refreshResult.data as any).data,
+        payload: (refreshResult.data as { data: any }).data,
       });
 
       // Retry the original query with new token
@@ -48,7 +48,7 @@ const baseQueryWithReauth = async (args: any, api: any, extraOptions: any) => {
 
   // Handle 500 Internal Server Error - log but don't break the app
   if (result?.error?.status === 500) {
-    console.warn(`Server error for ${args.url}:`, result.error);
+    console.warn(`Server error for ${typeof args === 'string' ? args : args.url}:`, result.error);
     // Return a structured error that components can handle gracefully
     return {
       error: {

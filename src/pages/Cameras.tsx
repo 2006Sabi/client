@@ -25,9 +25,10 @@ import {
   Filter,
   Search,
   Pencil,
+  Play,
 } from "lucide-react";
 import { useCameras } from "@/hooks/useReduxData";
-import { useDeleteCameraMutation } from "@/store/api/cameraApi";
+import { useDeleteCameraMutation, useUpdateCameraMutation } from "@/store/api/cameraApi";
 import {
   CameraGridSkeleton,
   ErrorState,
@@ -35,7 +36,7 @@ import {
 } from "@/components/ui/loading";
 import { useAppDispatch } from "@/store/hooks";
 import { addNotification } from "@/store/slices/uiSlice";
-import type { Camera, CreateCameraRequest } from "@/types/api";
+import type { Camera, CreateCameraRequest, UpdateCameraRequest } from "@/types/api";
 import { useCachedData } from "@/hooks/useCachedData";
 import { useOptimizedCameraData } from "@/hooks/useOptimizedCameraData";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
@@ -52,6 +53,17 @@ import {
 } from "@/components/ui/select";
 import { useLocalIp } from "../contexts/LocalIpContext";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import TestStreamDialog from "@/components/TestStreamDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const Cameras = () => {
   const dispatch = useAppDispatch();
@@ -59,15 +71,45 @@ const Cameras = () => {
   const location = useLocation();
   const { data: cameras, loading: isLoading, error } = useCameras();
   const [deleteCamera] = useDeleteCameraMutation();
+  const [updateCamera] = useUpdateCameraMutation();
   const { refreshCameras } = useCachedData();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const [streamErrorIds, setStreamErrorIds] = useState<string[]>([]);
+  const [streamLoadedIds, setStreamLoadedIds] = useState<string[]>([]);
   const handleStreamError = useCallback((cameraId: string) => {
     setStreamErrorIds((prev) =>
       prev.includes(cameraId) ? prev : [...prev, cameraId]
     );
   }, []);
+
+  // Function to update camera status to Online when stream loads successfully
+  const handleStreamLoad = useCallback(async (cameraId: string) => {
+    // Only update if not already marked as loaded
+    if (!streamLoadedIds.includes(cameraId)) {
+      setStreamLoadedIds((prev) => [...prev, cameraId]);
+      
+      try {
+        // Update camera status to Online via API
+        await updateCamera({
+          id: cameraId,
+          updates: { status: "Online" } as UpdateCameraRequest
+        }).unwrap();
+        
+        // Show success notification
+        dispatch(
+          addNotification({
+            type: "success",
+            title: "Camera Status Updated",
+            message: "Camera is now online and streaming",
+          })
+        );
+      } catch (error) {
+        console.warn("Failed to update camera status:", error);
+        // Don't show error notification to avoid spam
+      }
+    }
+  }, [updateCamera, dispatch, streamLoadedIds, setStreamLoadedIds]);
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -75,6 +117,10 @@ const Cameras = () => {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [editCamera, setEditCamera] = useState<Camera | null>(null);
   const [viewCamera, setViewCamera] = useState<Camera | null>(null);
+  const [testCamera, setTestCamera] = useState<Camera | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [cameraToDelete, setCameraToDelete] = useState<Camera | null>(null);
+  const [confirmInput, setConfirmInput] = useState("");
 
   // Use the optimized camera data hook
   const {
@@ -126,7 +172,8 @@ const Cameras = () => {
             message: `${cameraName} has been removed from the system`,
           })
         );
-        // Don't call refreshCameras here as the WebSocket will handle the update
+        // Refresh cameras data to immediately update the UI
+        refreshCameras();
       } catch (err) {
         dispatch(
           addNotification({
@@ -139,7 +186,7 @@ const Cameras = () => {
         setDeletingId(null);
       }
     },
-    [deleteCamera, dispatch]
+    [deleteCamera, dispatch, refreshCameras]
   );
 
   const handleCopyUrl = useCallback(
@@ -171,12 +218,19 @@ const Cameras = () => {
     // Optionally refresh or show notification
   }, []);
 
+  const handleStreamTestComplete = useCallback((success: boolean) => {
+    if (success) {
+      // Refresh camera data to reflect the updated status
+      refreshCameras();
+    }
+  }, [refreshCameras]);
+
   const localIp = useLocalIp();
 
   // Memoized camera grid to prevent unnecessary re-renders
   const cameraGrid = useMemo(() => {
     return filteredCameras.map((camera) => {
-      const isOnline = camera.status === "Online";
+      const isOnline = camera.status === 'Online';
       return (
         <Card
           key={camera._id}
@@ -195,14 +249,6 @@ const Cameras = () => {
                 : "bg-gradient-to-r from-red-400 via-red-500 to-rose-600"
             }`}
           />
-
-          {/* Subtle background pattern */}
-          <div className="absolute inset-0 opacity-5">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10" />
-            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-400/20 to-transparent rounded-full blur-3xl" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-gradient-to-tr from-purple-400/20 to-transparent rounded-full blur-2xl" />
-          </div>
-
           <CardHeader className="pb-2 sm:pb-3 lg:pb-4 pt-4 sm:pt-6 relative z-10">
             <CardTitle className="flex items-center justify-between text-sm sm:text-base lg:text-lg">
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
@@ -231,12 +277,11 @@ const Cameras = () => {
               </Badge>
             </CardTitle>
           </CardHeader>
-
           <CardContent className="space-y-3 sm:space-y-4 p-3 sm:p-4 lg:p-6 relative z-10">
             {/* Live Video Stream */}
             <div className="aspect-video bg-black/80 rounded-lg overflow-hidden flex items-center justify-center mb-2">
               {isOnline ? (
-                localIp ? (
+                camera.httpUrl ? (
                   streamErrorIds.includes(camera._id) ? (
                     <div className="flex flex-col items-center justify-center w-full h-full text-gray-400">
                       <WifiOff className="h-8 w-8 mb-2" />
@@ -245,8 +290,9 @@ const Cameras = () => {
                   ) : (
                     <img
                       className="w-full h-full object-cover"
-                      src={`http://${localIp}:5000/stream/${camera._id}`}
+                      src={camera.httpUrl}
                       alt="Live Camera Stream"
+                      onLoad={() => handleStreamLoad(camera._id)}
                       onError={(e) => {
                         // Only set placeholder if not already set
                         if (
@@ -259,12 +305,12 @@ const Cameras = () => {
                           handleStreamError(camera._id);
                         }
                       }}
-                      style={{ width: "100%", height: "100%" }}
                     />
                   )
                 ) : (
                   <div className="flex flex-col items-center justify-center w-full h-full text-gray-400">
-                    <span>Loading stream...</span>
+                    <WifiOff className="h-8 w-8 mb-2" />
+                    <span>No stream URL available</span>
                   </div>
                 )
               ) : (
@@ -347,11 +393,29 @@ const Cameras = () => {
                 <Eye className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
                 <span className="hidden sm:inline">View</span>
               </Button>
+              
+              {/* Test Stream Button - Only show for offline cameras or when httpUrl is available */}
+              {(camera.status === "Offline" || camera.httpUrl) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-8 sm:h-9 sm:w-9 bg-white/80 hover:bg-green-50/90 border-gray-200/50 hover:border-green-500 text-gray-700 hover:text-green-600 transition-all duration-200 backdrop-blur-sm rounded-none"
+                  title="Test Stream"
+                  onClick={() => setTestCamera(camera)}
+                >
+                  <Play className="h-3 w-3 sm:h-4 sm:w-4" />
+                </Button>
+              )}
+              
               <Button
                 variant="outline"
                 size="sm"
                 className="h-8 w-8 sm:h-9 sm:w-9 bg-white/80 hover:bg-red-50/90 border-gray-200/50 hover:border-red-500 text-gray-700 hover:text-red-600 transition-all duration-200 backdrop-blur-sm rounded-none"
-                onClick={() => handleDeleteCamera(camera._id, camera.name)}
+                onClick={() => {
+                  setCameraToDelete(camera);
+                  setDeleteConfirmOpen(true);
+                  setConfirmInput("");
+                }}
                 disabled={deletingId === camera._id}
               >
                 {deletingId === camera._id ? (
@@ -385,6 +449,7 @@ const Cameras = () => {
     isMobile,
     localIp,
     handleStreamError,
+    handleStreamLoad,
     streamErrorIds,
   ]);
 
@@ -427,19 +492,15 @@ const Cameras = () => {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <SidebarProvider>
         <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 via-white to-slate-50 relative overflow-hidden">
-          {/* Enhanced Background Elements */}
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/30 via-purple-50/20 to-pink-50/30" />
-          <div className="absolute top-0 left-0 w-full h-full">
-            <div className="absolute top-20 left-10 w-72 h-72 bg-gradient-to-br from-blue-400/10 to-purple-400/10 rounded-full blur-3xl" />
-            <div className="absolute top-40 right-20 w-96 h-96 bg-gradient-to-bl from-purple-400/10 to-pink-400/10 rounded-full blur-3xl" />
-            <div className="absolute bottom-20 left-1/4 w-80 h-80 bg-gradient-to-tr from-cyan-400/10 to-blue-400/10 rounded-full blur-3xl" />
-          </div>
-
+          <ErrorState
+            title="Camera Loading Error"
+            message="Unable to load cameras. Please try again later."
+            onRetry={refreshCameras}
+          />
           <AppSidebar />
           <SidebarInset className="flex-1 relative z-10">
             <header className="flex h-12 sm:h-16 shrink-0 items-center gap-4 border-0 px-3 sm:px-6 lg:px-8 glass-effect">
@@ -447,7 +508,7 @@ const Cameras = () => {
             </header>
             <main className="flex-1 overflow-auto p-3 sm:p-6 lg:p-8 pt-2 sm:pt-3">
               <div className="space-y-4 sm:space-y-6 lg:space-y-8">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                <div className="flex items-center justify-between">
                   <div>
                     <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-[#cd0447] to-[#e91e63] bg-clip-text text-transparent mb-1 sm:mb-2">
                       Camera Management
@@ -456,16 +517,8 @@ const Cameras = () => {
                       Manage all security cameras in your system
                     </p>
                   </div>
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <DataRefreshButton refreshType="cameras" size="sm" />
-                    <AddCameraDialog onAddCamera={handleAddCamera} />
-                  </div>
                 </div>
-                <ErrorState
-                  title="Failed to load cameras"
-                  message="Unable to fetch camera data from the server"
-                  onRetry={refreshCameras}
-                />
+                <CameraGridSkeleton />
               </div>
             </main>
           </SidebarInset>
@@ -474,282 +527,113 @@ const Cameras = () => {
     );
   }
 
-  // Empty state
-  if (cameraData.length === 0) {
-    return (
-      <SidebarProvider>
-        <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 via-white to-slate-50 relative overflow-hidden">
-          {/* Enhanced Background Elements */}
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-50/30 via-purple-50/20 to-pink-50/30" />
-          <div className="absolute top-0 left-0 w-full h-full">
-            <div className="absolute top-20 left-10 w-72 h-72 bg-gradient-to-br from-blue-400/10 to-purple-400/10 rounded-full blur-3xl" />
-            <div className="absolute top-40 right-20 w-96 h-96 bg-gradient-to-bl from-purple-400/10 to-pink-400/10 rounded-full blur-3xl" />
-            <div className="absolute bottom-20 left-1/4 w-80 h-80 bg-gradient-to-tr from-cyan-400/10 to-blue-400/10 rounded-full blur-3xl" />
-          </div>
-
-          <AppSidebar />
-          <SidebarInset className="flex-1 relative z-10">
-            <header className="flex h-12 sm:h-16 shrink-0 items-center gap-4 border-0 px-3 sm:px-6 lg:px-8 glass-effect">
-              <div className="flex-1" />
-            </header>
-            <main className="flex-1 overflow-auto p-3 sm:p-6 lg:p-8 pt-2 sm:pt-3">
-              <div className="space-y-4 sm:space-y-6 lg:space-y-8">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-                  <div>
-                    <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-[#cd0447] to-[#e91e63] bg-clip-text text-transparent mb-1 sm:mb-2">
-                      Video Management System
-                    </h2>
-                    <p className="text-xs sm:text-sm lg:text-base text-muted-foreground">
-                      Manage all security cameras in your system
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <DataRefreshButton refreshType="cameras" size="sm" />
-                    <AddCameraDialog onAddCamera={handleAddCamera} />
-                  </div>
-                </div>
-                <EmptyState
-                  title="No cameras configured"
-                  message="Add your first security camera to start monitoring"
-                  action={<AddCameraDialog onAddCamera={handleAddCamera} />}
-                />
-              </div>
-            </main>
-          </SidebarInset>
-        </div>
-      </SidebarProvider>
-    );
-  }
-
+  // Main return statement
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full bg-gradient-to-br from-slate-50 via-white to-slate-50 relative overflow-hidden">
         {/* Enhanced Background Elements */}
         <div className="absolute inset-0 bg-gradient-to-br from-blue-50/30 via-purple-50/20 to-pink-50/30" />
         <div className="absolute top-0 left-0 w-full h-full">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-gradient-to-br from-blue-400/10 to-purple-400/10 rounded-full blur-3xl animate-pulse" />
-          <div
-            className="absolute top-40 right-20 w-96 h-96 bg-gradient-to-bl from-purple-400/10 to-pink-400/10 rounded-full blur-3xl animate-pulse"
-            style={{ animationDelay: "2s" }}
-          />
-          <div
-            className="absolute bottom-20 left-1/4 w-80 h-80 bg-gradient-to-tr from-cyan-400/10 to-blue-400/10 rounded-full blur-3xl animate-pulse"
-            style={{ animationDelay: "4s" }}
-          />
+          <div className="absolute top-20 left-10 w-72 h-72 bg-gradient-to-br from-blue-400/10 to-purple-400/10 rounded-full blur-3xl" />
+          <div className="absolute top-40 right-20 w-96 h-96 bg-gradient-to-bl from-purple-400/10 to-pink-400/10 rounded-full blur-3xl" />
+          <div className="absolute bottom-20 left-1/4 w-80 h-80 bg-gradient-to-tr from-cyan-400/10 to-blue-400/10 rounded-full blur-3xl" />
         </div>
 
         <AppSidebar />
         <SidebarInset className="flex-1 relative z-10">
+          <header className="flex h-12 sm:h-16 shrink-0 items-center gap-4 border-0 px-3 sm:px-6 lg:px-8 glass-effect">
+            <div className="flex-1" />
+          </header>
           <main className="flex-1 overflow-auto p-3 sm:p-6 lg:p-8 pt-2 sm:pt-3">
             <div className="space-y-4 sm:space-y-6 lg:space-y-8">
-              {/* Enhanced Responsive Header Section */}
-              <div className="flex flex-col gap-4 sm:gap-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-                  <div className="flex-1">
-                    <h2 className="text-xxl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-[#cd0447] to-[#e91e63] bg-clip-text text-transparent mb-1 sm:mb-4">
-                      Video Management System
-                    </h2>
-                    <p className="text-xs sm:text-sm lg:text-base text-muted-foreground mb-2 sm:mb-3">
-                      Manage all security cameras in your system
-                    </p>
-                    {/* Responsive Status Counters */}
-                    <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                        <span className="text-xs sm:text-sm text-muted-foreground">
-                          {statusCounts.onlineCount} Online
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                        <span className="text-xs sm:text-sm text-muted-foreground">
-                          {statusCounts.offlineCount} Offline
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                        <span className="text-xs sm:text-sm text-muted-foreground">
-                          {statusCounts.totalCount} Total
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <DataRefreshButton refreshType="cameras" size="sm" />
-                    <AddCameraDialog onAddCamera={handleAddCamera} />
-                  </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-[#cd0447] to-[#e91e63] bg-clip-text text-transparent mb-1 sm:mb-2">
+                    Camera Management
+                  </h2>
+                  <p className="text-xs sm:text-sm lg:text-base text-muted-foreground">
+                    Manage all security cameras in your system
+                  </p>
                 </div>
-
-                {/* Enhanced Search and Filter Section */}
-                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                  {/* Search Input */}
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Search cameras by name or location..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="rounded-none shadow-sm focus:shadow-md transition-shadow pl-10 h-10 sm:h-11 text-sm bg-white/80 backdrop-blur-sm border-gray-200/50 focus:border-[#cd0447] focus:ring-[#cd0447]/20"
-                    />
-                  </div>
-
-                  {/* Status Filter */}
-                  <div className="flex items-center gap-2 sm:gap-3">
-                    <Select
-                      value={statusFilter}
-                      onValueChange={setStatusFilter}
-                    >
-                      <SelectTrigger className="rounded-none shadow-sm focus:shadow-md transition-shadow w-full sm:w-32 h-10 sm:h-11 text-sm bg-white/80 backdrop-blur-sm border-gray-200/50 focus:border-[#cd0447] focus:ring-[#cd0447]/20">
-                        <Filter className="h-4 w-4 mr-2" />
-                        <SelectValue placeholder="Status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Status</SelectItem>
-                        <SelectItem value="online">Online</SelectItem>
-                        <SelectItem value="offline">Offline</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {/* View Mode Toggle (Desktop only) */}
-                    {!isMobile && (
-                      <div className="flex items-center border border-gray-200/50 overflow-hidden bg-white/80 backdrop-blur-sm rounded-none">
-                        <Button
-                          variant={viewMode === "grid" ? "default" : "ghost"}
-                          size="sm"
-                          onClick={() => setViewMode("grid")}
-                          className="rounded-none border-0 h-10 px-3 bg-gradient-to-r from-[#cd0447] to-[#e91e63] text-white hover:from-[#b80340] hover:to-[#d81b60]"
-                        >
-                          Grid
-                        </Button>
-                        <Button
-                          variant={viewMode === "list" ? "default" : "ghost"}
-                          size="sm"
-                          onClick={() => setViewMode("list")}
-                          className="rounded-none border-0 h-10 px-3"
-                        >
-                          List
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Results Count */}
-                {searchTerm || statusFilter !== "all" ? (
-                  <div className="text-sm text-muted-foreground bg-white/50 backdrop-blur-sm px-3 py-2 border border-gray-200/50 rounded-none">
-                    Showing {filteredCameras.length} of {cameraData.length}{" "}
-                    cameras
-                  </div>
-                ) : null}
+                <AddCameraDialog onAddCamera={handleAddCamera} />
               </div>
-
-              {/* Responsive Camera Grid/List */}
-              {filteredCameras.length === 0 ? (
-                <div className="text-center py-8 sm:py-12">
-                  <div className="text-gray-500 text-sm sm:text-base bg-white/50 backdrop-blur-sm px-4 py-3 border border-gray-200/50 rounded-none">
-                    {searchTerm || statusFilter !== "all"
-                      ? "No cameras match your search criteria"
-                      : "No cameras found"}
-                  </div>
-                </div>
-              ) : (
-                <div
-                  className={
-                    viewMode === "list" && !isMobile
-                      ? "space-y-3"
-                      : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6"
-                  }
-                >
-                  {cameraGrid}
-                </div>
-              )}
-
-              {/* Mobile Floating Action Button */}
-              <div className="fixed bottom-4 right-4 sm:hidden z-50">
-                <Button
-                  size="lg"
-                  className="rounded-none shadow-md hover:shadow-lg transition-shadow w-14 h-14 bg-gradient-to-r from-[#cd0447] to-[#e91e63] text-white"
-                  onClick={() => {
-                    const addButton =
-                      document.querySelector("[data-add-camera]");
-                    if (addButton) {
-                      (addButton as HTMLElement).click();
-                    }
-                  }}
-                >
-                  <Plus className="h-6 w-6" />
-                </Button>
+              
+              {/* Camera Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {cameraGrid}
               </div>
             </div>
           </main>
         </SidebarInset>
       </div>
-      {/* Edit Camera Dialog (only visible when editCamera is set) */}
-      {editCamera && (
-        <EditCameraDialog
-          camera={editCamera}
-          onEditCamera={handleEditCamera}
-          onClose={() => setEditCamera(null)}
-        />
-      )}
-      {/* Fullscreen Video Dialog */}
-      {viewCamera && (
-        <Dialog open={!!viewCamera} onOpenChange={() => setViewCamera(null)}>
-          <DialogContent className="max-w-full w-screen h-screen flex flex-col items-center justify-center bg-black/95 p-0">
-            <button
-              onClick={() => setViewCamera(null)}
-              className="absolute top-4 right-4 z-50 bg-white/80 hover:bg-white text-black rounded-full p-2 shadow-lg"
-              aria-label="Close"
+      
+      {/* Edit Camera Dialog */}
+      <EditCameraDialog 
+        camera={editCamera} 
+        onClose={() => setEditCamera(null)}
+        onEditCamera={handleEditCamera}
+      />
+      
+      {/* Test Stream Dialog */}
+      <TestStreamDialog
+        camera={testCamera}
+        open={!!testCamera}
+        onOpenChange={(open) => !open && setTestCamera(null)}
+        onStreamTestComplete={handleStreamTestComplete}
+      />
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Delete Camera</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the camera{" "}
+              <strong>{cameraToDelete?.name}</strong>? This action cannot be undone.
+              Please type the camera name to confirm.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Input
+            type="text"
+            placeholder="Type camera name to confirm"
+            value={confirmInput}
+            onChange={(e) => setConfirmInput(e.target.value)}
+            className="mt-2"
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={confirmInput !== cameraToDelete?.name}
+              onClick={async () => {
+                if (!cameraToDelete) return;
+                try {
+                  await deleteCamera(cameraToDelete._id).unwrap();
+                  dispatch(
+                    addNotification({
+                      type: "success",
+                      title: "Camera Deleted",
+                      message: `${cameraToDelete.name} has been removed from the system`,
+                    })
+                  );
+                } catch (err) {
+                  dispatch(
+                    addNotification({
+                      type: "error",
+                      title: "Delete Failed",
+                      message: "Failed to delete camera",
+                    })
+                  );
+                } finally {
+                  setDeleteConfirmOpen(false);
+                  setCameraToDelete(null);
+                  setConfirmInput("");
+                }
+              }}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-            <div className="flex-1 flex items-center justify-center w-full h-full">
-              {localIp ? (
-                streamErrorIds.includes(viewCamera._id) ? (
-                  <div className="text-white text-xl flex flex-col items-center justify-center">
-                    <WifiOff className="h-8 w-8 mb-2" />
-                    Stream unavailable
-                  </div>
-                ) : (
-                  <img
-                    className="object-contain max-w-full max-h-full bg-black"
-                    src={`http://${localIp}:5000/stream/${viewCamera._id}`}
-                    alt="Live Camera Stream Fullscreen"
-                    onError={(e) => {
-                      if (
-                        !e.currentTarget.src.endsWith("/public/placeholder.svg")
-                      ) {
-                        e.currentTarget.src = "/public/placeholder.svg";
-                      } else {
-                        handleStreamError(viewCamera._id);
-                      }
-                    }}
-                    style={{ width: "100vw", height: "100vh" }}
-                  />
-                )
-              ) : (
-                <div className="text-white text-xl">Loading stream...</div>
-              )}
-            </div>
-            <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 text-white text-lg bg-black/60 px-6 py-2 rounded shadow-lg">
-              {viewCamera.name} &mdash; {viewCamera.location}
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarProvider>
   );
 };

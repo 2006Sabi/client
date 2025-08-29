@@ -20,6 +20,7 @@ import Register from "./pages/Register";
 import { GlobalAnomalyNotifier } from "@/components/GlobalAnomalyNotifier";
 import RegisterApprovalPendingPage from "./pages/RegisterApprovalPendingPage";
 import OtpVerificationPage from "./pages/OtpVerificationPage";
+import AIReport from "./pages/AIReport";
 import { LocalIpProvider } from "@/contexts/LocalIpContext";
 
 // Improved Error Boundary Component
@@ -303,6 +304,16 @@ const App = () => {
                         <ProtectedRoute>
                           <LocalIpProvider>
                             <Alerts />
+                          </LocalIpProvider>
+                        </ProtectedRoute>
+                      }
+                    />
+                    <Route
+                      path="/ai-report"
+                      element={
+                        <ProtectedRoute>
+                          <LocalIpProvider>
+                            <AIReport />
                           </LocalIpProvider>
                         </ProtectedRoute>
                       }

@@ -39,13 +39,13 @@ const EditCameraDialog = ({
   onClose,
 }: EditCameraDialogProps) => {
   const dispatch = useAppDispatch();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [formData, setFormData] = useState({
-    name: camera.name,
-    location: camera.location,
-    url: camera.url,
-    httpUrl: camera.httpUrl,
-    anomalyEntities: camera.anomalyEntities || ([] as string[]),
+    name: camera?.name || "",
+    location: camera?.location || "",
+    url: camera?.url || "",
+    httpUrl: camera?.httpUrl || "",
+    anomalyEntities: camera?.anomalyEntities || ([] as string[]),
   });
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -54,15 +54,19 @@ const EditCameraDialog = ({
   const operationService = OperationService.getInstance();
 
   useEffect(() => {
-    setOpen(true);
-    setFormData({
-      name: camera.name,
-      location: camera.location,
-      url: camera.url,
-      httpUrl: camera.httpUrl,
-      anomalyEntities: camera.anomalyEntities || [],
-    });
-    setError("");
+    if (camera) {
+      setOpen(true);
+      setFormData({
+        name: camera.name,
+        location: camera.location,
+        url: camera.url,
+        httpUrl: camera.httpUrl,
+        anomalyEntities: camera.anomalyEntities || [],
+      });
+      setError("");
+    } else {
+      setOpen(false);
+    }
   }, [camera]);
 
   const handleChange = (field: string, value: string) => {
@@ -156,7 +160,7 @@ const EditCameraDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleCancel}>
-      <DialogContent className="rounded-none shadow-xl">
+      <DialogContent className="rounded-none shadow-xl w-full max-w-xs sm:max-w-md md:max-w-lg p-4 sm:p-6 md:p-8">
         <DialogHeader>
           <DialogTitle>Edit Camera</DialogTitle>
           <DialogDescription>Edit the details of this camera</DialogDescription>

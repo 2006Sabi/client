@@ -9,10 +9,12 @@ import { AnomalyAlerts } from "@/components/AnomalyAlerts";
 import { useLocation } from "react-router-dom";
 import { useGetAnomalyGraphDataQuery } from "@/store/api/anomalyApi";
 import GanttChart from "@/components/GanttChart";
+import { AnomalyDetailView } from "@/components/AnomalyDetailView";
 
 const Alerts = () => {
   const location = useLocation();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedAnomaly, setSelectedAnomaly] = useState<any>(null);
 
   // Fetch comprehensive anomaly graph data from API
   const { data: comprehensiveGraphData, isLoading: graphLoading } =
@@ -36,6 +38,8 @@ const Alerts = () => {
         end: string;
         type: string;
         status: string;
+        anomalyId?: string;
+        anomalyData?: any;
       }>;
     } = {};
 
@@ -63,6 +67,8 @@ const Alerts = () => {
             })}`,
             type: anomaly.type,
             status: anomaly.status,
+            anomalyId: anomaly._id,
+            anomalyData: anomaly,
           }));
         }
       }
@@ -70,6 +76,16 @@ const Alerts = () => {
 
     return tasks;
   }, [comprehensiveGraphData]);
+
+  // Handle anomaly click from gantt chart
+  const handleAnomalyClick = (anomalyData: any) => {
+    setSelectedAnomaly(anomalyData);
+  };
+
+  // Handle closing the detail view
+  const handleCloseDetailView = () => {
+    setSelectedAnomaly(null);
+  };
 
   return (
     <SidebarProvider>
@@ -93,14 +109,19 @@ const Alerts = () => {
                     </button>
                   </div>
                 )}
-                <div className="overflow-x-auto">
-                  <div className="min-w-[600px] sm:min-w-[800px] lg:min-w-[900px]">
-                    <GanttChart
-                      selectedDate={selectedDate}
-                      cameraTasks={cameraTasks}
-                      onDateSelect={setSelectedDate}
-                    />
-                  </div>
+                <div className="w-full max-w-full overflow-hidden">
+                <GanttChart
+                  selectedDate={selectedDate}
+                  cameraTasks={cameraTasks}
+                  onDateSelect={setSelectedDate}
+                  onAnomalyClick={handleAnomalyClick}
+                />
+                {selectedAnomaly && (
+                  <AnomalyDetailView
+                    anomaly={selectedAnomaly}
+                    onClose={handleCloseDetailView}
+                  />
+                )}
                 </div>
               </div>
               

@@ -56,11 +56,13 @@
 @layer base {
   * {
     @apply border-border;
+    font-family: "Times New Roman", Times, serif;
   }
 
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground;
     background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+    font-family: "Times New Roman", Times, serif;
   }
 }
 
